@@ -20,6 +20,8 @@
 package fr.uga.pddl4j.planners.hsp;
 
 import fr.uga.pddl4j.util.BitState;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * This class implements a node of the tree search.
@@ -35,7 +37,8 @@ public final class Node extends BitState {
      * The parent node of this node.
      */
     private Node parent;
-
+    private Set<Node> successors;
+        private double heuristic_value;
     /**
      * The operator apply to reach this node.
      */
@@ -51,6 +54,7 @@ public final class Node extends BitState {
      */
     private int heuristic;
 
+    private int depth;
     /**
      * Creates a new node from a specified state.
      *
@@ -75,6 +79,8 @@ public final class Node extends BitState {
         this.operator = operator;
         this.cost = cost;
         this.heuristic = heuristic;
+        this.depth = -1;
+        this.successors = new LinkedHashSet<Node>();
     }
 
     /**
@@ -84,6 +90,15 @@ public final class Node extends BitState {
      */
     public final int getOperator() {
         return operator;
+    }
+        /**
+     * Adds a successor to this state.
+     * 
+     * @param successor the successor to added.
+     * @return <code>true</code> if the node was added; <code>false</code>otherwise.
+     */
+        public boolean addSuccessor(final Node successor) {
+        return this.successors.add(successor);
     }
 
     /**
@@ -148,6 +163,49 @@ public final class Node extends BitState {
     public final void setHeuristic(int estimates) {
         this.heuristic = estimates;
     }
+        public double getHeuristicValue() {
+        return this.heuristic_value;
+    }
+    
+        /**
+     * Returns the depth of this state.
+     * 
+     * @return the depth of this state.
+     */
+    public int getDepth() {
+    	return this.depth;
+    }
+    
+        public boolean contains(final Node other) {
+        return this.intersect(other).equals(other);
+    }
+    public Node intersect(final Node other) {
+        final Node clone = this.clone();
+        clone.and(other);
+        return clone;
+    }
+    @Override
+        public Node clone() {
+        return (Node) super.clone();
+    }
+    
+    /**
+     * Set the depth of this state.
+     * 
+     * @param depth
+     */
+    public void setDepth(final int depth) {
+    	this.depth = depth;
+    }
+        /**
+     * Returns <code>true</code> if a specified state is include in an
+     * other state.
+     * 
+     * @param other the other state.
+     * @return <code>true</code> if a specified state is include in this
+     *         state; <code>false</code>otherwise.
+     */
+
 
     /**
      * Returns the value of the heuristic function, i.e.,
