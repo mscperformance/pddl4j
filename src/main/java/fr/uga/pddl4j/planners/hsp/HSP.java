@@ -53,12 +53,12 @@ public final class HSP {
     /**
      * The default heuristic.
      */
-    private static final Heuristic.Type DEFAULT_HEURISTIC = Heuristic.Type.FAST_FORWARD;
+    private static final Heuristic.Type DEFAULT_HEURISTIC = Heuristic.Type.CRITICAL_PATH;
 
     /**
      * The default CPU time allocated to the search in seconds.
      */
-    private static final int DEFAULT_CPU_TIME = 600;
+    private static final int DEFAULT_CPU_TIME = 1000;
 
     /**
      * The default weight of the heuristic.
