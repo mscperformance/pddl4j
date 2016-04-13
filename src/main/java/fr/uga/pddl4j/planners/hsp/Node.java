@@ -29,7 +29,7 @@ import java.util.Set;
  * @author D. Pellier
  * @version 1.0 - 14.06.2010
  */
-public final class Node extends BitState {
+public final class Node extends BitState{
 
     private static final long serialVersionUID = 1L;
 
@@ -117,6 +117,9 @@ public final class Node extends BitState {
      */
     public final Node getParent() {
         return parent;
+    }
+        public void setHeuristicValue(final double value) {
+        this.heuristic_value = value;
     }
 
     /**

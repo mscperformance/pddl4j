@@ -34,9 +34,7 @@ import fr.uga.pddl4j.util.MemoryAgent;
 
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.Serializable;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -52,7 +50,7 @@ import java.util.Set;
  */
 public final class HSP {
 
-    /**
+    /** 
      * The default heuristic.
      */
     private static final Heuristic.Type DEFAULT_HEURISTIC = Heuristic.Type.FAST_FORWARD;
@@ -101,7 +99,6 @@ public final class HSP {
          */
         TRACE_LEVEL
     }
-    private Node initialState;
     /**
      * The time needed to search a solution plan.
      */
@@ -154,8 +151,6 @@ public final class HSP {
         try {
             parser.parse(ops, facts);
         } catch (FileNotFoundException fnfException) {
-            //TODO manage the error here
-            fnfException.printStackTrace();
         }
         if (!parser.getErrorManager().isEmpty()) {
             parser.getErrorManager().printAll();
@@ -190,29 +185,21 @@ public final class HSP {
      * @param pb the problem to solve.
      */
     public void search(final CodedProblem pb) {
-                final Heuristic.Type type = (Heuristic.Type) this.arguments.get(HSP.Argument.HEURISTIC_TYPE);
-        final Heuristic heuristic = HeuristicToolKit.createHeuristic(type, pb);
-        // Get the initial state from the planning problem
-        final BitState init = new BitState(pb.getInit());
-        final BitState goalz = new BitState(pb.getGoal());
-        BitExp goal = pb.getGoal();
         //final BitExp goal = new BitExp(pb.getGoal());
-        Node root = new Node(init, null, -1, 0, heuristic.estimate(init, pb.getGoal()));
-        this.initialState = root; 
-        //Node plan = this.enforced_hill_climbing(initialState, goalz);
-           // if(plan == null){
-        Node plan = null;
-            System.out.println("Enforced Hill Climb Failed");
-           //LinkedList<String> planz = null;
-        if (pb.isSolvable()) {
-            plan = this.greedy_best_first_search(pb, initialState, goal);
-        }
-               
-         List<String> planz = this.extract(plan, pb);
-        //planz = this.extract(root, pb);
+          Node plan = this.enforced_hill_climbing(pb);
+           if(plan == null){
+           System.out.println("Enforced Hill Climb Failed");
+             }
+         plan = this.greedy_best_first_search(pb);
+       if(plan == null){
+           System.out.println("Greedy Best First Search Failed");
+       
+         }
+        List<String> planz = this.extract(plan, pb);
         // The rest it is just to print the result
         final int traceLevel = (Integer) this.arguments.get(HSP.Argument.TRACE_LEVEL);
         if (traceLevel > 0 && traceLevel != 8) {
+            
             if (pb.isSolvable()) {
                 if (planz != null) {
                     System.out.printf("%nfound plan as follows:%n%n");
@@ -264,36 +251,37 @@ public final class HSP {
         private int nb_states;
         private int max_depth;
         
-   private Node enforced_hill_climbing(Node initialState, BitState goal){
-        this.nb_states = 0;
+   private Node enforced_hill_climbing(CodedProblem problem){
+       final long begin = System.currentTimeMillis();
+        final Heuristic.Type type = (Heuristic.Type) this.arguments.get(HSP.Argument.HEURISTIC_TYPE);
+        final Heuristic heuristic = HeuristicToolKit.createHeuristic(type, problem);
+       this.nb_states = 0;
         this.max_depth = 0;
+        BitState init = new BitState(problem.getInit());
+        Node root = new Node(init, null, 0, 0, heuristic.estimate(init, problem.getGoal()));
         // Creates the initial state
-        
-        final Node s0 = initialState.clone();
-        
-        
+        final Node s0 = root.clone();
         // Compute the heuristic value of the initial state
-        s0.setHeuristic(initialState.getCost());
-        // Compute the helpful actions of the initial state
-        
+        s0.setHeuristic(heuristic.estimate(s0, problem.getGoal()));
+        //s0.setHeuristic(heuristic.estimate(initialState, goal));
         // Create the open list of the enforced hill-climbing algorithm
         final LinkedList<Node> open_list = new LinkedList<>();
 		// Add the initial state to the open list
 		open_list.add(s0);
 		
 		// Initialize the best heuristic value to the heuristic value of the initial state
-		double best_heuristic = s0.getHeuristic();
+		double best_heuristic = s0.getHeuristicValue();
 		// Declare the solution state wit null value
 		Node solution = null;
 		// The boolean used to indicate that a dead end occurs
 		boolean dead_end_free = true;
-		
+		BitExp goal = new BitExp(problem.getGoal());
 		// The main loop of the enforced hill-climbing algorithm that implements
 		// the breadth first search
 		while (!open_list.isEmpty() && solution == null && dead_end_free) {
 			final Node current_state = open_list.pop();
                         //solution_state = this.extract(state, problem);
-			final LinkedList<Node> successors = this.getSuccessors(current_state, goal);
+			final LinkedList<Node> successors = this.getSuccessors(current_state, problem, goal);
 			// Update the boolean used to indicate if a dead end is detected
                         
 			dead_end_free = !successors.isEmpty();
@@ -314,17 +302,13 @@ public final class HSP {
 				// bread first search
 				open_list.addLast(successor);
 				this.nb_states++;
-                // If the heuristic value = 0 we found a solution state
-				// Finally we add the successor to the open list to pursue the
-				// bread first search
-				open_list.addLast(successor);
-				this.nb_states++;
-            }
                         }
-        
-        
-       // System.out.println("NB STATES: " + this.nb_states);
-        //System.out.println("MAX DEPTH: " + this.max_depth);
+                    }
+       
+                    // Take time to compute the searching time
+            long end = System.currentTimeMillis();
+            // Compute the searching time
+            this.searchingTime = end - begin;
         
         // Return the solution state of null if no solution was found
         return solution;
@@ -332,47 +316,55 @@ public final class HSP {
     }
 
 
-        private LinkedList<Node> getSuccessors(Node state, BitState goal) {
+        private LinkedList<Node> getSuccessors(Node state, CodedProblem problem, BitExp goal) {
         // Creates an empty list of neighbors 
+        
         final LinkedList<Node> successors = new LinkedList<>();
-        
         if (state.getHeuristicValue() == Double.POSITIVE_INFINITY) return successors;
-        
+        BitState goalz = new BitState(problem.getGoal());
         final Node previous_goals_reached = state.clone();
-        previous_goals_reached.and(goal);
-        
-        
-        //final BitExp goal = problem.getGoal();
+        previous_goals_reached.and(goalz);
         // For each helpful actions creates the next states
         final BitVector helpful_actions = new BitVector(state);
         
         for (int i = helpful_actions.nextSetBit(0); i >= 0; i = helpful_actions.nextSetBit(i + 1)) {
            helpful_actions.get(i);
-            // Gets the helpful action from the actions table
-            BitExp action = new BitExp();
-            
+            BitOp op = problem.getOperators().get(i);
             // Creates the next state
             final Node next_state = new Node(state);
             
             // Adds the positive effects
-            next_state.or(action.getPositive());
+            next_state.or(op.getCondEffects().get(0).getEffects().getPositive());
             // Deletes the negative effects
-            next_state.andNot(action.getNegative());  
+            next_state.andNot(op.getCondEffects().get(0).getEffects().getNegative());  
 
             // Computes the goals reached by applying the current helpful action
             final Node new_goals_reached = next_state.clone();
-            new_goals_reached.and(goal);
+            new_goals_reached.and(goalz);
             new_goals_reached.andNot(previous_goals_reached);
             double heuristic_value = next_state.getHeuristicValue();
-            if(!goal.intersects(new_goals_reached)){
-                next_state.setHeuristic((int) heuristic_value);
+            if(!goalz.intersects(new_goals_reached)){
+                next_state.setHeuristicValue(heuristic_value);
                 next_state.setParent(state);
+                next_state.setOperator(op.getArity());
+                next_state.apply(goal);
+                state.addSuccessor(next_state);
                 successors.add(next_state);
             
             }
             }
         
         return successors;
+    }
+      private LinkedList<String> extract(final Node initialState, final CodedProblem problem) {
+        Node n = initialState;
+        final LinkedList<String> plan = new LinkedList<>();
+        while (n.getParent() != null) {
+            final BitOp op = problem.getOperators().get(n.getOperator());
+            plan.addFirst(problem.toShortString(op));
+            n = n.getParent();
+        }
+        return plan;
     }
 
     /**
@@ -382,41 +374,34 @@ public final class HSP {
      * @param problem the coded planning problem to solve.
      * @return a solution plan or null if it does not exist.
      */
-    private Node greedy_best_first_search(final CodedProblem problem, Node initialState, BitExp goal) {
+    private Node greedy_best_first_search(final CodedProblem problem) {
         final long begin = System.currentTimeMillis();
         final Heuristic.Type type = (Heuristic.Type) this.arguments.get(HSP.Argument.HEURISTIC_TYPE);
         final Heuristic heuristic = HeuristicToolKit.createHeuristic(type, problem);
         // Get the initial state from the planning problem
-        final BitState init = new BitState(problem.getInit());
+         BitState init = new BitState(problem.getInit());
+        Node root = new Node(init, null, 0, 0, heuristic.estimate(init, problem.getGoal()));
+        // Creates the initial state
+        final Node s0 = root.clone();
          
         // Initialize the closed list of nodes (store the nodes explored)
-        final Set<Node> closeSet = new HashSet<Node>();
-        final Set<Node> openSet = new HashSet<Node>();
-        // Initialize the opened list (store the pending node)
-        //final double weight = (Double) this.arguments.get(HSP.Argument.WEIGHT);
-        // The list stores the node ordered according to the A* (f = g + h) function
-        goal = problem.getGoal();
+        final Set<Node> closeSet = new HashSet<>();
+        final Set<Node> openSet = new HashSet<>();
         // Creates the root node of the tree search
-        //state = new Node(init, null, -1, 0, heuristic.estimate(init, problem.getGoal()));
-        final Node root = initialState.clone();
-        root.setHeuristic(heuristic.estimate(initialState, goal));
-// Adds the root to the list of pending nodes
-        root.setDepth(0);
-        root.setHeuristic(initialState.getCost());
-        openSet.add(root);
+        s0.setDepth(0);
+        s0.setHeuristicValue(root.getOperator());
+        openSet.add(s0);
         Node solution = null; 
-        LinkedList<String> plan = null;
         final int CPUTime = (Integer) this.arguments.get(HSP.Argument.CPU_TIME);
         // Start of the search
         while (!openSet.isEmpty() && solution == null && this.searchingTime < CPUTime) {
             // Pop the first node in the pending list open
-            final Node current = this.pop(openSet);            // If the goal is satisfy in the current node then extract the plan and return it
-                if(current.satisfy(goal)){
+            final Node current = this.pop(openSet);           
+                if(current.satisfy(problem.getGoal())){
                     solution = current;
-                
-                
             } else {
                 closeSet.add(current);
+                int index = 0;
                 for (BitOp op : problem.getOperators()) {
                     // Test if a specified operator is applicable in the current state
                     if (op.isApplicable(current)) {
@@ -427,8 +412,9 @@ public final class HSP {
                         // Apply the effect of the applicable operator
                         if(!closeSet.contains(stateAfter)){ 
                             stateAfter.setDepth(current.getDepth() +1);
-                            stateAfter.setHeuristic(stateAfter.getCost() + stateAfter.getDepth());
+                            stateAfter.setHeuristic(heuristic.estimate(stateAfter, problem.getGoal()));
                             stateAfter.setParent(current);
+                            stateAfter.setOperator(index);
                             current.addSuccessor(stateAfter);
                             openSet.add(stateAfter);
                                     
@@ -436,13 +422,15 @@ public final class HSP {
                         }
 
                     }
+                    index++;
                 }
             }
+        }
             // Take time to compute the searching time
             long end = System.currentTimeMillis();
             // Compute the searching time
             this.searchingTime = end - begin;
-        }
+        
         // Compute the memory used by the search
         this.searchingMemory += MemoryAgent.deepSizeOf(closeSet) + MemoryAgent.deepSizeOf(openSet)
             + MemoryAgent.deepSizeOf(openSet);
@@ -452,16 +440,6 @@ public final class HSP {
         return solution;
     }
 
-        private LinkedList<String> extract(final Node node, final CodedProblem problem) {
-        Node n = node;
-        final LinkedList<String> plan = new LinkedList<>();
-        while (n.getParent() != null) {
-            final BitOp op = problem.getOperators().get(n.getOperator());
-            plan.addFirst(problem.toShortString(op));
-            n = n.getParent();
-        }
-        return plan;
-    }
 
     private Node pop(Collection<Node> states) {
         Node state = null;
@@ -684,29 +662,5 @@ public final class HSP {
         return options;
     }
 
-    /**
-     * Node comparator class for HSP planner.
-     */
-    private static class NodeComparator implements Comparator<Node>, Serializable {
-
-        private static final long serialVersionUID = 1L;
-
-        /**
-         * The weight of the heuristic use for the comparison.
-         */
-        private double weight;
-
-        /**
-         * Build the Node comparator object base on heuristic weight.
-         * @param weight the heuristic weight
-         */
-        public NodeComparator(double weight) {
-            this.weight = weight;
-        }
-
-        @Override
-        public int compare(final Node n1, final Node n2) {
-            return Double.compare(n1.getValueF(weight), n2.getValueF(weight));
-        }
+    
     }
-}
